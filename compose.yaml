@@ -1,0 +1,135 @@
+x-app: &app
+  image: ${LEASE_IMAGE:-greenwheels-lease:local}
+  environment:
+    DATABASE_URL: postgresql://lease:lease@db:5432/lease
+    KAFKA_BROKERS: kafka:29092
+  depends_on:
+    db:
+      condition: service_healthy
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: lease
+      POSTGRES_PASSWORD: lease
+      POSTGRES_DB: lease
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U lease -d lease"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  
+  kafka-volume-init:
+    image: alpine:3.22
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ["chown -R 1000:1000 /data && chmod u+rwx /data"]
+    volumes:
+      - kafkadata:/data
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - kafkadata:/tmp/kraft-combined-logs
+    depends_on:
+      kafka-volume-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:29092", "--list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  kafka-init:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:29092", "--create", "--if-not-exists", "--topic", "lease-facts", "--partitions", "6", "--replication-factor", "1"]
+  api:
+    <<: *app
+    build: .
+    ports: ["127.0.0.1:8000:8000"]
+  publisher:
+    <<: *app
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    command: ["python", "-m", "lease.worker", "publisher"]
+  projector:
+    <<: *app
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    command: ["python", "-m", "lease.worker", "projector"]
+  evaluator:
+    <<: *app
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started
+    command: ["python", "-m", "lease.worker", "evaluator"]
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    command: ["--kafka.server=kafka:29092"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+  blackbox:
+    image: prom/blackbox-exporter:v0.26.0
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/rules.yml:/etc/prometheus/rules.yml:ro
+      - promdata:/prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=35d"]
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    ports: ["127.0.0.1:9093:9093"]
+    volumes:
+      - ${ALERT_CONFIG:-./monitoring/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
+  grafana:
+    image: grafana/grafana:12.0.2
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+  cadvisor:
+    image: ghcr.io/google/cadvisor:0.55.1
+    privileged: true
+    restart: unless-stopped
+    command:
+      - --docker_only=true
+      - --store_container_labels=true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+volumes:
+  pgdata:
+  kafkadata:
+  promdata:

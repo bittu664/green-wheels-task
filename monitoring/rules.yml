@@ -1,0 +1,92 @@
+groups:
+  - name: lease-slos
+    rules:
+      - record: lease:ingestion_bad_ratio:5m
+        expr: >-
+          (sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome="bad"}[5m])) or (sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome!="excluded"}[5m])) * 0)) / sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome!="excluded"}[5m]))
+      - record: lease:ingestion_bad_ratio:1h
+        expr: >-
+          (sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome="bad"}[1h])) or (sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome!="excluded"}[1h])) * 0)) / sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome!="excluded"}[1h]))
+      - record: lease:ingestion_bad_ratio:30d
+        expr: >-
+          (sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome="bad"}[30d])) or (sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome!="excluded"}[30d])) * 0)) / sum(increase(lease_http_requests_total{method="POST",route="/leases/events",outcome!="excluded"}[30d]))
+      - record: lease:read_bad_ratio:5m
+        expr: >-
+          clamp_min(1 - (sum(increase(lease_http_duration_seconds_bucket{method="GET",route="/leases/{driver_id}",outcome="good",le="0.3"}[5m])) or (sum(increase(lease_http_requests_total{method="GET",route="/leases/{driver_id}",outcome!="excluded"}[5m])) * 0)) / sum(increase(lease_http_requests_total{method="GET",route="/leases/{driver_id}",outcome!="excluded"}[5m])), 0)
+      - record: lease:read_bad_ratio:1h
+        expr: >-
+          clamp_min(1 - (sum(increase(lease_http_duration_seconds_bucket{method="GET",route="/leases/{driver_id}",outcome="good",le="0.3"}[1h])) or (sum(increase(lease_http_requests_total{method="GET",route="/leases/{driver_id}",outcome!="excluded"}[1h])) * 0)) / sum(increase(lease_http_requests_total{method="GET",route="/leases/{driver_id}",outcome!="excluded"}[1h])), 0)
+      - record: lease:read_bad_ratio:30d
+        expr: >-
+          clamp_min(1 - (sum(increase(lease_http_duration_seconds_bucket{method="GET",route="/leases/{driver_id}",outcome="good",le="0.3"}[30d])) or (sum(increase(lease_http_requests_total{method="GET",route="/leases/{driver_id}",outcome!="excluded"}[30d])) * 0)) / sum(increase(lease_http_requests_total{method="GET",route="/leases/{driver_id}",outcome!="excluded"}[30d])), 0)
+      - record: lease:freshness_bad_ratio:5m
+        expr: >-
+          sum(increase(lease_payment_deadlines_total{outcome="bad"}[5m])) / sum(increase(lease_payment_deadlines_total{outcome=~"good|bad"}[5m]))
+      - record: lease:freshness_bad_ratio:1h
+        expr: >-
+          sum(increase(lease_payment_deadlines_total{outcome="bad"}[1h])) / sum(increase(lease_payment_deadlines_total{outcome=~"good|bad"}[1h]))
+      - record: lease:freshness_bad_ratio:30d
+        expr: >-
+          sum(increase(lease_payment_deadlines_total{outcome="bad"}[30d])) / sum(increase(lease_payment_deadlines_total{outcome=~"good|bad"}[30d]))
+  - name: lease-alerts
+    rules:
+      - alert: LeaseIngestionHighErrorRate
+        expr: >-
+          lease:ingestion_bad_ratio:5m > 0.01440 and lease:ingestion_bad_ratio:1h > 0.01440
+        for: 1m
+        labels:
+          severity: critical
+          service: fleet-lease
+        annotations:
+          description: "Check database waits and recent API deployments."
+          runbook_url: https://github.com/YOUR_ORG/greenwheels-lease/blob/main/RUNBOOK.md#ingestion-errors
+      - alert: LeaseReadLatencyFastBurn
+        expr: >-
+          lease:read_bad_ratio:5m > 0.14400 and lease:read_bad_ratio:1h > 0.14400
+        for: 1m
+        labels:
+          severity: critical
+          service: fleet-lease
+        annotations:
+          description: "Compare API latency, SQL latency and pool waits."
+          runbook_url: https://github.com/YOUR_ORG/greenwheels-lease/blob/main/RUNBOOK.md#lease-read-latency
+      - alert: LeaseFreshnessFastBurn
+        expr: >-
+          lease:freshness_bad_ratio:5m > 0.07200 and lease:freshness_bad_ratio:1h > 0.07200
+        for: 1m
+        labels:
+          severity: critical
+          service: fleet-lease
+        annotations:
+          description: "Compare outbox age and Kafka partition lag."
+          runbook_url: https://github.com/YOUR_ORG/greenwheels-lease/blob/main/RUNBOOK.md#lease-event-processing-backlog
+      - alert: LeaseServiceUnavailable
+        expr: >-
+          probe_success{job="lease-readiness"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: fleet-lease
+        annotations:
+          description: "Check readiness response and ECS target health."
+          runbook_url: https://github.com/YOUR_ORG/greenwheels-lease/blob/main/RUNBOOK.md#service-unavailable
+      - alert: LeaseProjectionBacklog
+        expr: >-
+          lease_oldest_pending_payment_seconds > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: fleet-lease
+        annotations:
+          description: "Find whether the oldest payment is stuck before or after Kafka."
+          runbook_url: https://github.com/YOUR_ORG/greenwheels-lease/blob/main/RUNBOOK.md#lease-event-processing-backlog
+      - alert: LeaseMonitoringMissing
+        expr: >-
+          up{job=~"lease-api|lease-evaluator|lease-projector|lease-readiness|kafka"} == 0 or absent(up{job="lease-readiness"})
+        for: 3m
+        labels:
+          severity: warning
+          service: fleet-lease
+        annotations:
+          description: "Check scrape targets and exporter logs."
+          runbook_url: https://github.com/YOUR_ORG/greenwheels-lease/blob/main/RUNBOOK.md#monitoring-missing

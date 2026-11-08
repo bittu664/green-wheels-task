@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.env
+*.tfstate*
+terraform/.terraform/
+slack-info.txt
+add-dashboard.sh
+
+/monitoring/grafana/datasources/lease-operations.local.yml
+/secrets/

@@ -1,0 +1,145 @@
+{
+  "uid": "fleet-lease-operations",
+  "title": "Greenwheels - Lease & Payment Operations",
+  "schemaVersion": 39,
+  "tags": [
+    "greenwheels"
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "panels": [
+    {
+      "title": "Current leases by status",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "lease-operations-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "lease-operations-postgres"
+          },
+          "rawQuery": true,
+          "rawSql": "\n        SELECT status AS \"Lease status\", leases AS \"Leases\"\n        FROM public.grafana_lease_status_counts ORDER BY status\n    ",
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Payment operations summary",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "lease-operations-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "lease-operations-postgres"
+          },
+          "rawQuery": true,
+          "rawSql": "\n        SELECT pending_payments AS \"Pending now\",\n               pending_over_30_seconds AS \"Pending over 30s\",\n               accepted_last_24_hours AS \"Accepted in last 24h\",\n               applied_last_24_hours AS \"Applied in last 24h\"\n        FROM public.grafana_payment_counts\n    ",
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Oldest pending payment",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "lease_oldest_pending_payment_seconds"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Payments applied within 30s (%)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (1 - lease:freshness_bad_ratio:30d)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      }
+    }
+  ]
+}

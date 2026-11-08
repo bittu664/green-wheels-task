@@ -1,0 +1,5 @@
+fastapi==0.115.12
+uvicorn==0.34.3
+psycopg[binary,pool]==3.2.9
+confluent-kafka==2.10.0
+prometheus-client==0.22.1

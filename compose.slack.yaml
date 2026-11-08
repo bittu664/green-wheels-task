@@ -1,0 +1,5 @@
+services:
+  alertmanager:
+    volumes:
+      - ./monitoring/alertmanager.slack.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./secrets/slack-webhook:/etc/alertmanager/slack-webhook:ro
