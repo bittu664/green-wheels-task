@@ -14,12 +14,12 @@ provider "aws" {
 
 variable "aws_region" {
   type    = string
-  default = "eu-west-1"
+  default = "ap-south-1"
 }
 
 variable "environment" {
   type    = string
-  default = "sandbox"
+  default = "prod"
 }
 
 variable "logs_kms_key_arn" {

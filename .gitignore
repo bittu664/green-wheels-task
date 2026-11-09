@@ -5,6 +5,8 @@ __pycache__/
 .env
 *.tfstate*
 terraform/.terraform/
+terraform/.terraform.lock.hcl
+prod.tfplan
 slack-info.txt
 add-dashboard.sh
 
