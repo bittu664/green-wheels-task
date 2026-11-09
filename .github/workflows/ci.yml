@@ -49,7 +49,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
-          REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          REPOSITORY: green-wheel-test
         run: |
           target="$REGISTRY/$REPOSITORY:$GITHUB_SHA"
           docker tag "$LEASE_IMAGE" "$target"
